@@ -135,7 +135,9 @@ static mp_int_t mp_machine_adc_read_u16(machine_adc_obj_t *self) {
     while (!LPADC_GetConvResult(self->adc, &result_struct)) {
     }
 
-    return result_struct.convValue * 2;
+    // Scale to 16-bit range: shift left by 3 bits
+    // Empirically verified: << 3 gives correct voltage readings for 3.3V inputs
+    return result_struct.convValue << 3;
 }
 
 void machine_adc_init(void) {

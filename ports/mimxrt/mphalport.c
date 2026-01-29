@@ -108,7 +108,25 @@ uint64_t mp_hal_time_ns(void) {
 // MAC address
 
 void mp_hal_get_unique_id(uint8_t id[]) {
-    #if defined CPU_MIMXRT1176_cm7
+    CLOCK_EnableClock(kCLOCK_Ocotp);
+
+    #if defined(MIMXRT117x_SERIES)
+    // Retry loop: reload shadow registers if they contain stale values
+    // This can happen after debugger reset - may need multiple retries
+    for (int retry = 0; retry < 5; retry++) {
+        if (OCOTP->FUSEN[0x10].FUSE != 0 || OCOTP->FUSEN[0x11].FUSE != 0) {
+            break;  // Shadow registers are valid
+        }
+        // Trigger shadow register reload
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        OCOTP->CTRL_SET = OCOTP_CTRL_RELOAD_SHADOWS_MASK;
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        // Delay for shadow registers to settle
+        for (volatile int delay = 0; delay < 100000; delay++) {
+        }
+    }
     *(uint32_t *)id = OCOTP->FUSEN[0x10].FUSE;
     *(uint32_t *)(id + 4) = OCOTP->FUSEN[0x11].FUSE;
     #else

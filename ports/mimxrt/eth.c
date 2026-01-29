@@ -381,6 +381,31 @@ void eth_init_0(eth_t *self, int eth_id, const phy_operations_t *phy_ops, int ph
 
     mp_hal_get_mac(0, hw_addr);
 
+    // Check if MAC is all zeros (OCOTP shadow registers may not be ready)
+    // This can happen after debugger reset even with early reload in board_init
+    #if defined(MIMXRT117x_SERIES)
+    bool mac_is_zero = true;
+    for (int i = 0; i < 6; i++) {
+        if (hw_addr[i] != 0) {
+            mac_is_zero = false;
+            break;
+        }
+    }
+    if (mac_is_zero) {
+        // Force OCOTP shadow register reload and retry
+        CLOCK_EnableClock(kCLOCK_Ocotp);
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        OCOTP->CTRL_SET = OCOTP_CTRL_RELOAD_SHADOWS_MASK;
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        // Small delay for shadow registers to settle
+        for (volatile int delay = 0; delay < 10000; delay++) {
+        }
+        mp_hal_get_mac(0, hw_addr);
+    }
+    #endif
+
     // Init the PHY interface & negotiate the speed
     phyHandle.ops = phy_ops;
     phy_config.phyAddr = phy_addr;
@@ -450,6 +475,31 @@ void eth_init_1(eth_t *self, int eth_id, const phy_operations_t *phy_ops, int ph
     #endif
 
     mp_hal_get_mac(1, hw_addr_1);
+
+    // Check if MAC is all zeros (OCOTP shadow registers may not be ready)
+    // This can happen after debugger reset even with early reload in board_init
+    #if defined(MIMXRT117x_SERIES)
+    bool mac_is_zero = true;
+    for (int i = 0; i < 6; i++) {
+        if (hw_addr_1[i] != 0) {
+            mac_is_zero = false;
+            break;
+        }
+    }
+    if (mac_is_zero) {
+        // Force OCOTP shadow register reload and retry
+        CLOCK_EnableClock(kCLOCK_Ocotp);
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        OCOTP->CTRL_SET = OCOTP_CTRL_RELOAD_SHADOWS_MASK;
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        // Longer delay for shadow registers to settle
+        for (volatile int delay = 0; delay < 1000000; delay++) {
+        }
+        mp_hal_get_mac(1, hw_addr_1);
+    }
+    #endif
 
     // Init the PHY interface & negotiate the speed
     phyHandle_1.ops = phy_ops;
@@ -582,12 +632,16 @@ static void eth_lwip_init(eth_t *self) {
     self->netif.hwaddr_len = 6;
     #if defined(ENET_PHY_ADDRESS)
     if (self == &eth_instance0) {
+        // Refresh MAC in case OCOTP is now ready
+        mp_hal_get_mac(0, hw_addr);
         memcpy(self->netif.hwaddr, hw_addr, 6);
         IP4_ADDR(&ipconfig[0], 192, 168, 0, 2);
     }
     #endif
     #if defined(ENET_1_PHY_ADDRESS)
     if (self == &eth_instance1) {
+        // Refresh MAC from OCOTP (which should be valid by now)
+        mp_hal_get_mac(1, hw_addr_1);
         memcpy(self->netif.hwaddr, hw_addr_1, 6);
         IP4_ADDR(&ipconfig[0], 192, 168, 0, 3);
     }

@@ -108,8 +108,18 @@ uint64_t mp_hal_time_ns(void) {
 // MAC address
 
 void mp_hal_get_unique_id(uint8_t id[]) {
-    // Enable OCOTP clock - required after debugger reset when clocks may be disabled
     CLOCK_EnableClock(kCLOCK_Ocotp);
+
+    #if defined(MIMXRT117x_SERIES)
+    // Reload shadow registers if they contain stale values (can happen after debugger reset)
+    if (OCOTP->FUSEN[0x10].FUSE == 0 && OCOTP->FUSEN[0x11].FUSE == 0) {
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+        OCOTP->CTRL_SET = OCOTP_CTRL_RELOAD_SHADOWS_MASK;
+        while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+        }
+    }
+    #endif
 
     #if defined CPU_MIMXRT1176_cm7
     *(uint32_t *)id = OCOTP->FUSEN[0x10].FUSE;

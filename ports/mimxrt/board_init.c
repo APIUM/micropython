@@ -60,6 +60,17 @@ void board_init(void) {
     // Enable IOCON clock
     CLOCK_EnableClock(kCLOCK_Iomuxc);
 
+    // Enable OCOTP clock and reload shadow registers for unique ID / MAC address.
+    // After debugger reset, shadow registers may contain stale values.
+    CLOCK_EnableClock(kCLOCK_Ocotp);
+    #if defined(MIMXRT117x_SERIES)
+    while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+    }
+    OCOTP->CTRL_SET = OCOTP_CTRL_RELOAD_SHADOWS_MASK;
+    while (OCOTP->CTRL & OCOTP_CTRL_BUSY_MASK) {
+    }
+    #endif
+
     // SDRAM
     #if MICROPY_HW_SDRAM_AVAIL
     mimxrt_sdram_init();
